@@ -1,0 +1,83 @@
+# .github/workflows/check_minecraft_release.yml
+
+name: Check for new Minecraft Release
+
+on:
+  # Bu workflow'u Actions sekmesinden manuel olarak çalıştırmanı sağlar
+  workflow_dispatch:
+
+  # Belirtilen zamanda otomatik olarak çalışmasını sağlar
+  schedule:
+    # Her gün UTC saatiyle 08:00'de çalışır (Türkiye saatiyle yaklaşık 11:00)
+    - cron: '0 8 * * *'
+
+jobs:
+  check-for-update:
+    name: Check for New Minecraft Release
+    runs-on: ubuntu-latest
+    steps:
+      # Adım 1: Mojang API'sinden en son ana sürüm numarasını al
+      - name: Get latest Minecraft release version
+        id: get_version
+        run: |
+          # Mojang'ın sürüm manifest API'sinden verileri çek
+          # -s sessiz mod, -L yönlendirmeleri takip et
+          MANIFEST_DATA=$(curl -sL https://launchermeta.mojang.com/mc/game/version_manifest.json)
+          
+          # Gelen JSON verisini 'jq' ile işle ve sadece '.latest.release' değerini al
+          # Bu sayede snapshot sürümleri tamamen göz ardı edilir
+          LATEST_VERSION=$(echo "${MANIFEST_DATA}" | jq -r '.latest.release')
+          
+          echo "Latest Minecraft release is: ${LATEST_VERSION}"
+          
+          # Alınan sürüm numarasını sonraki adımlarda kullanmak için bir output olarak ayarla
+          echo "version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
+          
+          # Önbellek mekanizması için bir işaret dosyası oluştur.
+          # Bu dosyanın varlığı, bu sürümün işlendiğini gösterecek.
+          touch "${LATEST_VERSION}.processed"
+
+      # Adım 2: Bu sürümün daha önce işlenip işlenmediğini önbellek (cache) ile kontrol et
+      - name: Check if this version has been processed before
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          # Önbelleğe alınacak/kontrol edilecek dosyanın yolu
+          path: ${{ steps.get_version.outputs.version }}.processed
+          
+          # Önbellek için benzersiz bir anahtar. Bu anahtar sürüm numarasına özeldir.
+          # Eğer bu anahtarla bir önbellek bulunursa, 'cache-hit' true döner ve bu,
+          # sürümün yeni olmadığı anlamına gelir.
+          key: minecraft-release-${{ steps.get_version.outputs.version }}
+
+      # Adım 3: Eğer sürüm yeniyse (önbellekte bulunamadıysa) Python script'ini çalıştır
+      - name: Checkout repository
+        # Bu adım sadece yeni bir sürüm bulunduğunda çalışır
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        # Bu adım sadece yeni bir sürüm bulunduğunda çalışır
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # İstediğin Python sürümünü belirtebilirsin
+
+      - name: Run Python script for new version
+        # Bu adım sadece yeni bir sürüm bulunduğunda çalışır
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        env:
+          # Yeni sürüm numarasını Python script'ine bir ortam değişkeni olarak gönder
+          NEW_VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          echo "✅ New Minecraft version found: $NEW_VERSION. Running main.py..."
+          
+          # Eğer Python projenin bağımlılıkları varsa, bu satırı aktif edebilirsin:
+          # python -m pip install -r requirements.txt
+          
+          python main.py
+
+      # Adım 4: Eğer sürüm yeni değilse bilgilendirme mesajı yazdır
+      - name: No new version found
+        if: steps.cache-check.outputs.cache-hit == 'true'
+        run: echo "No new Minecraft release. The latest version (${{ steps.get_version.outputs.version }}) has already been processed."
