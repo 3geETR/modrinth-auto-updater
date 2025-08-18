@@ -1,8 +1,10 @@
+# .github/workflows/check_minecraft_release.yml
+
 name: Check for new Minecraft Release
 
 on:
-  workflow_dispatch:  # Manuel tetikleme
-  schedule:           # Her gün 08:00 UTC (Türkiye’de ~11:00)
+  workflow_dispatch:
+  schedule:
     - cron: '0 8 * * *'
 
 jobs:
@@ -38,15 +40,19 @@ jobs:
         if: steps.version_check.outputs.cache-hit != 'true'
         run: echo "${{ steps.version_info.outputs.latest_version }}" > .version.txt
 
-      - name: Should we run script?
+      - name: Decide whether to run script
         id: should_run
-        if: github.event_name == 'workflow_dispatch' || steps.version_check.outputs.cache-hit != 'true'
-        run: echo "should_run=true" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || [ "${{ steps.version_check.outputs.cache-hit }}" != "true" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
 
   run-script:
     name: Run Python for new release
     needs: check-version
-    if: ${{ needs.check-version.outputs.should_run }}
+    if: needs.check-version.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -68,7 +74,7 @@ jobs:
   no-new-version:
     name: No new release
     needs: check-version
-    if: ${{ needs.check-version.outputs.should_run != 'true' }}
+    if: needs.check-version.outputs.should_run == 'false'
     runs-on: ubuntu-latest
     steps:
       - run: echo "ℹ️ No new Minecraft release. Latest is ${{ needs.check-version.outputs.latest_version }}"
