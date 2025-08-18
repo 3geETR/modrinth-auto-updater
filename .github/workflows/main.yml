@@ -1,7 +1,7 @@
 name: Check for new Minecraft Release
 
 on:
-  workflow_dispatch:  # Manuel çalıştırma
+  workflow_dispatch:  # Manuel tetikleme
   schedule:           # Her gün 08:00 UTC (Türkiye’de ~11:00)
     - cron: '0 8 * * *'
 
@@ -25,15 +25,18 @@ jobs:
           fi
 
           echo "Latest version is: $LATEST_VERSION"
-          echo "$LATEST_VERSION" > "$LATEST_VERSION.txt"
           echo "latest_version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Load version from cache
         id: version_check
         uses: actions/cache@v4
         with:
-          path: ${{ steps.version_info.outputs.latest_version }}.txt
+          path: .version.txt
           key: minecraft-release-${{ steps.version_info.outputs.latest_version }}
+
+      - name: Save new version marker
+        if: steps.version_check.outputs.cache-hit != 'true'
+        run: echo "${{ steps.version_info.outputs.latest_version }}" > .version.txt
 
       - name: Should we run script?
         id: should_run
@@ -61,3 +64,11 @@ jobs:
           echo "✅ New Minecraft version found: $NEW_VERSION"
           # python -m pip install -r requirements.txt
           python main.py
+
+  no-new-version:
+    name: No new release
+    needs: check-version
+    if: ${{ needs.check-version.outputs.should_run != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ℹ️ No new Minecraft release. Latest is ${{ needs.check-version.outputs.latest_version }}"
