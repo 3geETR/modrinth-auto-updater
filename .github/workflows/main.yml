@@ -1,80 +1,87 @@
-# .github/workflows/check_minecraft_release.yml
-
-name: Check for new Minecraft Release
+name: Check Minecraft Release
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 0 * * *'  # Her gün UTC 00:00'da
 
 jobs:
-  check-version:
-    name: Check latest Minecraft release
+  check-release:
+    name: Check for new Minecraft release
     runs-on: ubuntu-latest
     outputs:
-      latest_version: ${{ steps.version_info.outputs.latest_version }}
-      should_run: ${{ steps.should_run.outputs.should_run }}
+      new_release_found: ${{ steps.check_version.outputs.new_release_found }}
+      release_id: ${{ steps.check_version.outputs.release_id }}
     steps:
-      - name: Get latest Minecraft release
-        id: version_info
-        run: |
-          MANIFEST_DATA=$(curl -sL https://launchermeta.mojang.com/mc/game/version_manifest.json)
-          LATEST_VERSION=$(echo "${MANIFEST_DATA}" | jq -r '.latest.release')
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-          if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" == "null" ]; then
-            echo "::error::Failed to fetch Minecraft version"
-            exit 1
-          fi
+    - name: Restore last known version
+      uses: actions/cache@v3
+      id: version_cache
+      with:
+        path: last_version.txt
+        key: minecraft-version
 
-          echo "Latest version is: $LATEST_VERSION"
-          echo "latest_version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
+    - name: Check for new release
+      id: check_version
+      run: |
+        import requests
+        import os
 
-      - name: Load version from cache
-        id: version_check
-        uses: actions/cache@v4
-        with:
-          path: .version.txt
-          key: minecraft-release-${{ steps.version_info.outputs.latest_version }}
+        # API'den son sürüm bilgisini çek
+        manifest_url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+        response = requests.get(manifest_url)
+        data = response.json()
+        latest_release = data['latest']['release']
+        print(f"Latest stable release: {latest_release}")
 
-      - name: Save new version marker
-        if: steps.version_check.outputs.cache-hit != 'true'
-        run: echo "${{ steps.version_info.outputs.latest_version }}" > .version.txt
+        # Önceki sürümü kontrol et
+        last_version = ""
+        if os.path.exists("last_version.txt"):
+            with open("last_version.txt", "r") as f:
+                last_version = f.read().strip()
 
-      - name: Decide whether to run script
-        id: should_run
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || [ "${{ steps.version_check.outputs.cache-hit }}" != "true" ]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          else
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          fi
+        # Yeni sürüm kontrolü
+        new_release_found = "false"
+        if last_version != latest_release:
+            print(f"New release detected! {last_version} -> {latest_release}")
+            new_release_found = "true"
+            # Yeni sürümü kaydet
+            with open("last_version.txt", "w") as f:
+                f.write(latest_release)
+        else:
+            print("No new release found")
 
-  run-script:
-    name: Run Python for new release
-    needs: check-version
-    if: needs.check-version.outputs.should_run == 'true'
+        # Output ayarla
+        print(f"::set-output name=new_release_found::{new_release_found}")
+        print(f"::set-output name=release_id::{latest_release}")
+      shell: python
+
+    - name: Save new version to cache
+      if: steps.check_version.outputs.new_release_found == 'true'
+      uses: actions/cache@v3
+      with:
+        path: last_version.txt
+        key: minecraft-version
+
+  run-main:
+    name: Run main.py
+    needs: check-release
+    if: ${{ needs.check-release.outputs.new_release_found == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-      - name: Run Python script
-        env:
-          NEW_VERSION: ${{ needs.check-version.outputs.latest_version }}
-        run: |
-          echo "✅ New Minecraft version found: $NEW_VERSION"
-          # python -m pip install -r requirements.txt
-          python main.py
-
-  no-new-version:
-    name: No new release
-    needs: check-version
-    if: needs.check-version.outputs.should_run == 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "ℹ️ No new Minecraft release. Latest is ${{ needs.check-version.outputs.latest_version }}"
+    - name: Run main script
+      run: python main.py
+      env:
+        NEW_RELEASE_ID: ${{ needs.check-release.outputs.release_id }}
