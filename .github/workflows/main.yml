@@ -1,76 +1,63 @@
-# .github/workflows/check_minecraft_release.yml
-
 name: Check for new Minecraft Release
 
 on:
-  # Bu workflow'u Actions sekmesinden manuel olarak çalıştırmanı sağlar
-  workflow_dispatch:
-
-  # Belirtilen zamanda otomatik olarak çalışmasını sağlar
-  schedule:
-    # Her gün UTC saatiyle 08:00'de çalışır (Türkiye saatiyle yaklaşık 11:00)
+  workflow_dispatch:  # Manuel çalıştırma
+  schedule:           # Her gün 08:00 UTC (Türkiye’de ~11:00)
     - cron: '0 8 * * *'
 
 jobs:
-  check-for-update:
-    name: Check for New Minecraft Release
+  check-version:
+    name: Check latest Minecraft release
     runs-on: ubuntu-latest
+    outputs:
+      latest_version: ${{ steps.version_info.outputs.latest_version }}
+      should_run: ${{ steps.should_run.outputs.should_run }}
     steps:
-      # Adım 1: Mojang API'sinden en son ana sürüm numarasını al ve doğrula
-      - name: Get and verify latest Minecraft release version
-        id: get_version
+      - name: Get latest Minecraft release
+        id: version_info
         run: |
           MANIFEST_DATA=$(curl -sL https://launchermeta.mojang.com/mc/game/version_manifest.json)
           LATEST_VERSION=$(echo "${MANIFEST_DATA}" | jq -r '.latest.release')
-          
-          # HATA KONTROLÜ: Sürüm numarasının boş veya "null" olup olmadığını kontrol et
+
           if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" == "null" ]; then
-            echo "::error::Failed to fetch a valid Minecraft release version. API response might have changed."
+            echo "::error::Failed to fetch Minecraft version"
             exit 1
           fi
-          
-          echo "Latest Minecraft release is: ${LATEST_VERSION}"
-          echo "version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
-          
-          # Önbellek için işaret dosyasını oluştur
-          touch "${LATEST_VERSION}.processed"
 
-          # HATA AYIKLAMA: Dosyanın doğru oluşturulduğunu görmek için listele
-          echo "Listing files in current directory to verify:"
-          ls -la
+          echo "Latest version is: $LATEST_VERSION"
+          echo "$LATEST_VERSION" > "$LATEST_VERSION.txt"
+          echo "latest_version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
 
-      # Adım 2: Bu sürümün daha önce işlenip işlenmediğini önbellek (cache) ile kontrol et
-      - name: Check if this version has been processed before
-        id: cache-check
+      - name: Load version from cache
+        id: version_check
         uses: actions/cache@v4
         with:
-          # Önbelleğe alınacak/kontrol edilecek dosyanın yolu
-          path: ${{ steps.get_version.outputs.version }}.processed
-          
-          # Önbellek için benzersiz ve daha spesifik bir anahtar
-          key: ${{ runner.os }}-minecraft-release-${{ steps.get_version.outputs.version }}
+          path: ${{ steps.version_info.outputs.latest_version }}.txt
+          key: minecraft-release-${{ steps.version_info.outputs.latest_version }}
 
-      # Adım 3: Eğer sürüm yeniyse (önbellekte bulunamadıysa) Python script'ini çalıştır
+      - name: Should we run script?
+        id: should_run
+        if: github.event_name == 'workflow_dispatch' || steps.version_check.outputs.cache-hit != 'true'
+        run: echo "should_run=true" >> $GITHUB_OUTPUT
+
+  run-script:
+    name: Run Python for new release
+    needs: check-version
+    if: ${{ needs.check-version.outputs.should_run }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout repository
-        if: steps.cache-check.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: steps.cache-check.outputs.cache-hit != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Run Python script for new version
-        if: steps.cache-check.outputs.cache-hit != 'true'
+      - name: Run Python script
         env:
-          NEW_VERSION: ${{ steps.get_version.outputs.version }}
+          NEW_VERSION: ${{ needs.check-version.outputs.latest_version }}
         run: |
-          echo "✅ New Minecraft version found: $NEW_VERSION. Running main.py..."
+          echo "✅ New Minecraft version found: $NEW_VERSION"
           # python -m pip install -r requirements.txt
           python main.py
-
-      # Adım 4: Eğer sürüm yeni değilse bilgilendirme mesajı yazdır
-      - name: No new version found
-        if: steps.cache-check.outputs.cache-hit == 'true'
-        run: echo "No new Minecraft release. The latest version (${{ steps.get_version.outputs.version }}) has already been processed."
