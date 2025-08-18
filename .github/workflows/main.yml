@@ -45,10 +45,9 @@ jobs:
           # Önbelleğe alınacak/kontrol edilecek dosyanın yolu
           path: ${{ steps.get_version.outputs.version }}.processed
           
-          # Önbellek için benzersiz bir anahtar. Bu anahtar sürüm numarasına özeldir.
-          # Eğer bu anahtarla bir önbellek bulunursa, 'cache-hit' true döner ve bu,
-          # sürümün yeni olmadığı anlamına gelir.
-          key: minecraft-release-${{ steps.get_version.outputs.version }}
+          # Önbellek için benzersiz ve daha spesifik bir anahtar.
+          # Anahtara işletim sistemini de ekleyerek daha kararlı hale getiriyoruz.
+          key: ${{ runner.os }}-minecraft-release-${{ steps.get_version.outputs.version }}
 
       # Adım 3: Eğer sürüm yeniyse (önbellekte bulunamadıysa) Python script'ini çalıştır
       - name: Checkout repository
