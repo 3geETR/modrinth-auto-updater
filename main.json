@@ -1,0 +1,15 @@
+{
+	"double-damage": ["1.5"],
+	"double-hit-damage": ["1.5"],
+	"clean-main-menu": ["1.5"],
+	"freezing-water": ["1.5"],
+	"lava-alert": ["1.5"],
+	"sword-blocking-dp": ["1.5"],
+	"dennis-painting-on-java": ["1.5"],
+	"coordinate-bar-dp": ["1.5"],
+	"ore-detector-dp": ["1.5"],
+	"thirst-bar": ["1.5"],
+	"glass-hotbar-clean": ["1.5"],
+	"glass-hotbar": ["1.5"],
+	"glass-hotbar-connected": ["1.5"]
+}
