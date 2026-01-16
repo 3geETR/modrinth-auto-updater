@@ -45,7 +45,7 @@ def load_config() -> Dict[str, Any]:
 
 def get_project_versions(slug: str, headers: Dict[str, str]) -> List[Dict[str, Any]]:
     """Fetches all versions for a given project slug from Modrinth."""
-    url = f"{API_BASE}/project/{slug}/version"
+    url = f"{API_BASE}/project/{slug}/version?include_changelog=false"
     try:
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
