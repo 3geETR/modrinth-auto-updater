@@ -13,5 +13,6 @@
 	"glass-hotbar-clean": ["1.1"],
 	"glass-hotbar": ["1.1"],
 	"glass-hotbar-connected": ["1.1"],
-	"frying-pan-shield": ["1.1"]
+	"frying-pan-shield": ["1.1"],
+	"keep-random-items": ["1.0-1.21.5"]
 }
