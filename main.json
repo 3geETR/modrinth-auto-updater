@@ -14,5 +14,6 @@
 	"glass-hotbar": ["1.2"],
 	"glass-hotbar-connected": ["1.2"],
 	"frying-pan-shield": ["1.1"],
-	"keep-random-items": ["1.1"]
+	"keep-random-items": ["1.1"],
+	"controlify-more-adaptive-triggers": ["1.0"]
 }
